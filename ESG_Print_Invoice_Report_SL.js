@@ -1,5 +1,5 @@
 /**
- * @NApiVersion 2.1
+ * @NApiVersion 2.x
  * @NScriptType Suitelet
  * @NModuleScope SameAccount
  */
@@ -80,8 +80,8 @@ define(['N/render', 'N/record', 'N/xml', 'N/file', 'N/task', 'N/search', 'N/runt
           }),
           search.createColumn({name: "quantity",summary: "MAX", label: "Quantity"}),
           search.createColumn({name: "rate",summary: "MAX", label: "Item Rate"}),
-          search.createColumn({name: "line.cseg_bc_project", label: "Blue Collar Project"}),
-          search.createColumn({name: "line.cseg_bc_cost_code", label: "Cost Code"}),
+          search.createColumn({name: "line.cseg_bc_project", summary: "GROUP", label: "Blue Collar Project"}),
+          search.createColumn({name: "line.cseg_bc_cost_code", summary: "GROUP", label: "Cost Code"}),
           search.createColumn({name: "grossamount",summary: "MAX", label: "Amount"}),
           search.createColumn({
              name: "formulatextJS",
@@ -99,39 +99,22 @@ define(['N/render', 'N/record', 'N/xml', 'N/file', 'N/task', 'N/search', 'N/runt
         contractId = result.getValue({name: "custrecord_bc_proj_contract", join: "cseg_bc_project", summary: "MAX"}) || ''
         subaddress = result.getValue({name: "formulatextJS", summary: "MAX"})
 
-        var lineNumber = loadedRecord.findSublistLineWithValue({
-          sublistId: 'item',
-          fieldId: 'lineuniquekey',
-          value: result.getValue({name: 'lineuniquekey', summary: "GROUP"})
-        });
+        var groupValue = result.getValue({name: 'formulatext', summary: "MAX"}) || '';
+        var memoValue = result.getValue({name: 'formulatext1', summary: "MAX"}) || '';
+        var markupValue = result.getValue({name: 'formulatext2', summary: "MAX"});
 
-        var taxable = loadedRecord.getSublistValue({
-          sublistId: 'item',
-          fieldId: 'istaxable',
-          line: lineNumber
-        });
-
-        if (!taxable) {
-          resultArray.push({
-            line: result.getValue({name: 'lineuniquekey', summary: "GROUP"}),
-            group: result.getValue({name: 'formulatext', summary: "MAX"}).replace(/&/g, '&amp;'),
-            memo: result.getValue({name: 'formulatext1', summary: "MAX"}).replace(/&/g, '&amp;'),
-            markup: result.getValue({name: 'formulatext2', summary: "MAX"}),
-            qty: result.getValue({name: 'formulatext2', summary: "MAX"})? '': parseFloat(result.getValue({name: 'quantity', summary: "MAX"})),
-            rate: result.getValue({name: 'rate', summary: "MAX"}),
-            amount: result.getValue({name: 'grossamount', summary: "MAX"})
-          })
-        } else{
-          resultArray.push({
-            line: result.getValue({name: 'lineuniquekey', summary: "GROUP"}),
-            group: result.getValue({name: 'formulatext', summary: "MAX"}).replace(/&/g, '&amp;'),
-            memo: result.getValue({name: 'formulatext1', summary: "MAX"}).replace(/&/g, '&amp;'),
-            markup: result.getValue({name: 'formulatext2', summary: "MAX"}),
-            qty: result.getValue({name: 'formulatext2', summary: "MAX"})? '':  parseFloat(result.getValue({name: 'quantity', summary: "MAX"})),
-            rate: result.getValue({name: 'rate', summary: "MAX"}),
-            amount: result.getValue({name: 'grossamount', summary: "MAX"})
-          })
-        }
+        resultArray.push({
+          line: result.getValue({name: 'lineuniquekey', summary: "GROUP"}),
+          group: groupValue.replace(/&/g, '&amp;'),
+          memo: memoValue.replace(/&/g, '&amp;'),
+          descriptionKey: normalizeRollupValue(memoValue),
+          markup: markupValue,
+          qty: markupValue ? '' : parseFloat(result.getValue({name: 'quantity', summary: "MAX"})),
+          rate: result.getValue({name: 'rate', summary: "MAX"}),
+          amount: result.getValue({name: 'grossamount', summary: "MAX"}),
+          project: result.getValue({name: 'line.cseg_bc_project', summary: "GROUP"}) || '',
+          costcode: result.getValue({name: 'line.cseg_bc_cost_code', summary: "GROUP"}) || ''
+        })
 
         return true;
       });
@@ -332,22 +315,25 @@ define(['N/render', 'N/record', 'N/xml', 'N/file', 'N/task', 'N/search', 'N/runt
     // Ensure the value is a number
     if(!value) value = 0;
 
-    const number = parseFloat(value);
+    var number = parseFloat(value);
 
     // Convert number to a string with fixed two decimal places
-    const currencyString = number.toFixed(2);
+    var currencyString = number.toFixed(2);
 
     // Split the number into integer and decimal parts
-    const [integerPart, decimalPart] = currencyString.split('.');
+    var currencyParts = currencyString.split('.');
+    var integerPart = currencyParts[0];
+    var decimalPart = currencyParts[1];
 
     // Add commas to the integer part
-    const withCommas = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    var withCommas = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
     // Return formatted string with currency symbol and comma separation
     return withCommas + '.' + decimalPart;
   }
 
   function processData(data) {
+    data = groupByProjectCostCodeDescriptionAndRate(data);
     data = groupByDirectLabor(data);
     log.debug('data', data)
 
@@ -435,6 +421,86 @@ define(['N/render', 'N/record', 'N/xml', 'N/file', 'N/task', 'N/search', 'N/runt
     }
 
     return result;
+  }
+
+  function groupByProjectCostCodeDescriptionAndRate(data) {
+    var result = [];
+    var groupedData = {};
+    var groupedKeys = [];
+
+    for (var i = 0; i < data.length; i++) {
+      var item = data[i];
+      var rollupKey = getVendorBillRollupKey(item);
+
+      if (!rollupKey) {
+        result.push(item);
+        continue;
+      }
+
+      if (!groupedData[rollupKey]) {
+        groupedKeys.push(rollupKey);
+        groupedData[rollupKey] = {
+          line: item.line,
+          group: item.group,
+          memo: item.memo,
+          descriptionKey: item.descriptionKey,
+          markup: item.markup,
+          qty: 0,
+          rate: item.rate,
+          amount: 0,
+          project: item.project,
+          costcode: item.costcode
+        };
+      }
+
+      groupedData[rollupKey].qty += parseNumber(item.qty);
+      groupedData[rollupKey].amount += parseNumber(item.amount);
+    }
+
+    for (var keyIndex = 0; keyIndex < groupedKeys.length; keyIndex++) {
+      result.push(groupedData[groupedKeys[keyIndex]]);
+    }
+
+    log.debug('projectCostCodeDescriptionRateGroupedData', groupedData);
+    return result;
+  }
+
+  function getVendorBillRollupKey(item) {
+    if (!item || item.group == "Direct Labor" || item.markup) return '';
+    if (!item.project || !item.costcode || !item.descriptionKey || item.rate === '' || item.rate == null) return '';
+    if (isNaN(parseFloat(item.qty)) || isNaN(parseFloat(item.amount))) return '';
+
+    return [
+      normalizeRollupValue(item.project),
+      normalizeRollupValue(item.costcode),
+      item.descriptionKey,
+      normalizeRateForRollup(item.rate)
+    ].join('|');
+  }
+
+  function normalizeRollupValue(value) {
+    if (value == null) return '';
+
+    return String(value)
+      .replace(/&amp;/g, '&')
+      .replace(/<br\s*\/?>/gi, ' ')
+      .replace(/---\s*$/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function normalizeRateForRollup(value) {
+    var number = parseFloat(value);
+
+    if (isNaN(number)) return normalizeRollupValue(value);
+    return String(number);
+  }
+
+  function parseNumber(value) {
+    var number = parseFloat(value);
+
+    if (isNaN(number)) return 0;
+    return number;
   }
 
   function groupByDirectLabor(data) {
