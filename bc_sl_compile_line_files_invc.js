@@ -61,6 +61,7 @@ define(['N/record', 'N/render', 'N/search', 'N/file', 'N/xml', 'N/https'],
                 var getTranId = rec.getValue('tranid');
 
                 var folderId = getFolderId(recId);
+                var attachedRecordUrls = [];
 
 
 
@@ -81,7 +82,7 @@ define(['N/record', 'N/render', 'N/search', 'N/file', 'N/xml', 'N/https'],
                 var linkedTranIds = getLinkedTransactionIds(rec);
 
                 // 3. Every native file attachment (PDF) on each of those transactions.
-                var attachedRecordUrls = getAttachedPdfUrls(linkedTranIds);
+                getAttachedPdfUrls(linkedTranIds, attachedRecordUrls);
 
                 // 4. Merge them all into a single combined PDF.
                 var combinedFileId = null;
@@ -171,8 +172,8 @@ define(['N/record', 'N/render', 'N/search', 'N/file', 'N/xml', 'N/https'],
          * de-duplicated) and, within a transaction, ordered by file internal id
          * ascending for stable/deterministic output.
          */
-        function getAttachedPdfUrls(tranIds) {
-            var urls = [];
+        function getAttachedPdfUrls(tranIds, urls) {
+            //var urls = [];
             if (!tranIds || tranIds.length === 0) return urls;
 
             // Collect every PDF file attached to each transaction. No "keep going
