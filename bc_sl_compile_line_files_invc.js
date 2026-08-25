@@ -62,14 +62,9 @@ define(['N/record', 'N/render', 'N/search', 'N/file', 'N/xml', 'N/https'],
 
                 var folderId = getFolderId(recId);
 
-                // 1. Source transaction IDs pulled straight off this record's own
-                //    lines (custcol_bc_tm_source_transaction), instead of a search.
-                var linkedTranIds = getLinkedTransactionIds(rec);
 
-                // 2. Every native file attachment (PDF) on each of those transactions.
-                var attachedRecordUrls = getAttachedPdfUrls(linkedTranIds);
 
-                // 3. The ESG invoice-print Suitelet's PDF, appended as the LAST
+                // 1. The ESG invoice-print Suitelet's PDF, appended as the LAST
                 //    page of the merge below - the compiled attached-record PDFs
                 //    print first, the Suitelet result last. The Suitelet is asked
                 //    (output=fileid) to save its rendered PDF into this record's
@@ -79,6 +74,14 @@ define(['N/record', 'N/render', 'N/search', 'N/file', 'N/xml', 'N/https'],
                 if (printPdfUrl) {
                     attachedRecordUrls.push(printPdfUrl);
                 }
+
+
+                // 2. Source transaction IDs pulled straight off this record's own
+                //    lines (custcol_bc_tm_source_transaction), instead of a search.
+                var linkedTranIds = getLinkedTransactionIds(rec);
+
+                // 3. Every native file attachment (PDF) on each of those transactions.
+                var attachedRecordUrls = getAttachedPdfUrls(linkedTranIds);
 
                 // 4. Merge them all into a single combined PDF.
                 var combinedFileId = null;
