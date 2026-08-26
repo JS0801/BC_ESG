@@ -455,6 +455,10 @@ define(['N/render', 'N/record', 'N/xml', 'N/file', 'N/task', 'N/search', 'N/runt
 
       groupedData[rollupKey].qty += parseNumber(item.qty);
       groupedData[rollupKey].amount += parseNumber(item.amount);
+      if (groupedData[rollupKey].qty) {
+  groupedData[rollupKey].rate = groupedData[rollupKey].amount / groupedData[rollupKey].qty;
+}
+      
     }
 
     for (var keyIndex = 0; keyIndex < groupedKeys.length; keyIndex++) {
@@ -467,15 +471,17 @@ define(['N/render', 'N/record', 'N/xml', 'N/file', 'N/task', 'N/search', 'N/runt
 
   function getVendorBillRollupKey(item) {
     if (!item || item.group == "Direct Labor" || item.markup) return '';
-    if (!item.project || !item.costcode || !item.descriptionKey || item.rate === '' || item.rate == null) return '';
+    if (!item.project || !item.costcode || !item.descriptionKey) return '';
     if (isNaN(parseFloat(item.qty)) || isNaN(parseFloat(item.amount))) return '';
 
-    return [
-      normalizeRollupValue(item.project),
-      normalizeRollupValue(item.costcode),
-      item.descriptionKey,
-      normalizeRateForRollup(item.rate)
-    ].join('|');
+    
+
+return [
+  normalizeRollupValue(item.project),
+  normalizeRollupValue(item.costcode),
+  item.descriptionKey
+].join('|');
+
   }
 
   function normalizeRollupValue(value) {
