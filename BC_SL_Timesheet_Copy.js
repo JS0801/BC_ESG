@@ -504,7 +504,7 @@ var approvalStatus = cleanSelectId(getLineValue('custpage_approval_status', i));
 
                 var timeEntry = record.create({
                     type: record.Type.TIME_BILL,
-                    isDynamic: false
+                    isDynamic: true
                 });
 
                 setValueIfPresent(timeEntry, 'employee', employeeId);
