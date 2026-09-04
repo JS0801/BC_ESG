@@ -2,7 +2,7 @@
  * @NApiVersion 2.1
  * @NScriptType Suitelet
  */
-define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime'], function (record, serverWidget, redirect, search, runtime) {
+define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 'N/format'], function (record, serverWidget, redirect, search, runtime, format) {
     function onRequest(context) {
         if (context.request.method === 'GET') {
             try {
@@ -394,251 +394,216 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime'],
             }
 
         } else if (context.request.method === 'POST') {
-            try {
-                log.debug('--- START POST ---', '--- START POST ---')
-                var request = context.request;
-                var employeeId = request.parameters.custpage_employee;
-                var weekOf = request.parameters.custpage_date;
+    try {
+        log.debug('--- START POST ---', '--- START POST ---');
 
-                //Create New Timesheet
-                var newTimesheet = record.create({
-                    type: record.Type.TIME_SHEET,
-                    isDynamic: true
+        var request = context.request;
+        var employeeId = request.parameters.custpage_employee;
+        var weekOf = request.parameters.custpage_date;
+
+        function hasValue(value) {
+            return value !== null && value !== undefined && value !== '' && value !== ' ';
+        }
+
+        function toBool(value) {
+            return value === true || value === 'T' || value === 'true';
+        }
+
+        function firstSelectValue(value) {
+            return value && Array.isArray(value) && value.length > 0 ? value[0].value : null;
+        }
+
+        function setTimeLineValue(rec, fieldId, line, value) {
+            if (hasValue(value) || value === false || value === 0) {
+                rec.setSublistValue({
+                    sublistId: 'timeitem',
+                    fieldId: fieldId,
+                    line: line,
+                    value: value
                 });
-                newTimesheet.setValue({fieldId: 'employee', value: employeeId})
-                newTimesheet.setValue({fieldId: 'trandate', value: new Date(weekOf)})
-
-                //Retrieve data from GET
-                var lineCount = request.getLineCount({group: 'custpage_timesheet_sublist'});
-                log.debug('lineCount', lineCount)
-              if(lineCount > 0){
-                for (var i = 0; i < lineCount; i++) {
-                    newTimesheet.selectNewLine({sublistId: 'timeitem'});
-
-                    var projectId = request.getSublistValue({
-                        group: 'custpage_timesheet_sublist',
-                        name: 'custpage_project_id',
-                        line: i
-                    });
-                    newTimesheet.setCurrentSublistValue({
-                        sublistId: 'timeitem',
-                        fieldId: 'cseg_bc_project',
-                        value: projectId
-                    });
-
-                    var costCodeId = request.getSublistValue({
-                        group: 'custpage_timesheet_sublist',
-                        name: 'custpage_cost_code_id',
-                        line: i
-                    });
-                    newTimesheet.setCurrentSublistValue({
-                        sublistId: 'timeitem',
-                        fieldId: 'cseg_bc_cost_code',
-                        value: costCodeId
-                    });
-
-                    var taskId = request.getSublistValue({
-                        group: 'custpage_timesheet_sublist',
-                        name: 'custpage_task_id',
-                        line: i
-                    });
-                    newTimesheet.setCurrentSublistValue({
-                        sublistId: 'timeitem',
-                        fieldId: 'casetaskevent',
-                        value: taskId
-                    });
-
-                    var serviceItemId = request.getSublistValue({
-                        group: 'custpage_timesheet_sublist',
-                        name: 'custpage_item_id',
-                        line: i
-                    });
-                    newTimesheet.setCurrentSublistValue({sublistId: 'timeitem', fieldId: 'item', value: serviceItemId});
-
-                    var isBillable = request.getSublistValue({
-                        group: 'custpage_timesheet_sublist',
-                        name: 'custpage_billable',
-                        line: i
-                    });
-                    if (isBillable == 'T') {
-                        isBillable = true;
-                    } else {
-                        isBillable = false;
-                    }
-                    newTimesheet.setCurrentSublistValue({
-                        sublistId: 'timeitem',
-                        fieldId: 'isbillable',
-                        value: isBillable
-                    });
-
-                    var isNonBillable = request.getSublistValue({
-                        group: 'custpage_timesheet_sublist',
-                        name: 'custpage_nonbillable',
-                        line: i
-                    });
-                    if (isNonBillable == true) {
-                        isNonBillable = true;
-                    } else {
-                        isNonBillable = false;
-                    }
-                    newTimesheet.setCurrentSublistValue({
-                        sublistId: 'timeitem',
-                        fieldId: 'custcol_bc_billable_delete',
-                        value: isNonBillable
-                    });
-
-                    var isNonBillableTm = request.getSublistValue({
-                        group: 'custpage_timesheet_sublist',
-                        name: 'custpage_nonbillable_tm',
-                        line: i
-                    });
-                    if (isNonBillableTm == 'T') {
-                        isNonBillableTm = true;
-                    } else {
-                        isNonBillableTm = false;
-                    }
-                    newTimesheet.setCurrentSublistValue({
-                        sublistId: 'timeitem',
-                        fieldId: 'custcol_bc_tm_line_non_billable',
-                        value: isNonBillableTm
-                    });
-
-                    var timeType = request.getSublistValue({
-                        group: 'custpage_timesheet_sublist',
-                        name: 'custpage_time_type_id',
-                        line: i
-                    });
-                    newTimesheet.setCurrentSublistValue({
-                        sublistId: 'timeitem',
-                        fieldId: 'custcol_bc_time_type',
-                        value: timeType
-                    });
-
-                    var employeeSearch = search.lookupFields({
-                        type: search.Type.EMPLOYEE,
-                        id: employeeId,
-                        columns: ['custentity10', 'custentity_bc_tm_billing_class_emp']
-                    });
-
-                    var laborCodeId = (employeeSearch.custentity10 &&
-                        Array.isArray(employeeSearch.custentity10) &&
-                        employeeSearch.custentity10.length > 0)
-                        ? employeeSearch.custentity10[0].value
-                        : null;
-                    log.debug('laborCodeId', laborCodeId);
-                    if (laborCodeId) {
-                        newTimesheet.setCurrentSublistValue({
-                            sublistId: 'timeitem',
-                            fieldId: 'custcol1',
-                            value: laborCodeId
-                        });
-                    }
-
-                    var billingClass = (employeeSearch.billingclass &&
-                        Array.isArray(employeeSearch.billingclass) &&
-                        employeeSearch.billingclass.length > 0)
-                        ? employeeSearch.billingclass[0].value
-                        : null;
-                    log.debug('billingClass', billingClass);
-                    if (billingClass) {
-                        newTimesheet.setCurrentSublistValue({
-                            sublistId: 'timeitem',
-                            fieldId: 'billingclass',
-                            value: billingClass
-                        });
-                    }
-                    var shiftId = request.getSublistValue({
-                        group: 'custpage_timesheet_sublist',
-                        name: 'custpage_shift_id',
-                        line: i
-                    });
-                    newTimesheet.setCurrentSublistValue({
-                        sublistId: 'timeitem',
-                        fieldId: 'custcol_bc_tm_billing_shift',
-                        value: shiftId
-                    });
-
-                    var approvalStatus = request.getSublistValue({
-                        group: 'custpage_timesheet_sublist',
-                        name: 'custpage_approval_status',
-                        line: i
-                    });
-                    newTimesheet.setCurrentSublistValue({
-                        sublistId: 'timeitem',
-                        fieldId: 'approvalstatus',
-                        value: approvalStatus
-                    });
-
-                    var type = request.getSublistValue({
-                        group: 'custpage_timesheet_sublist',
-                        name: 'custpage_type',
-                        line: i
-                    });
-                    newTimesheet.setCurrentSublistValue({sublistId: 'timeitem', fieldId: 'timetype', value: type});
-
-                    for (var d = 0; d <= 6; d++) {
-                        var hours = request.getSublistValue({
-                            group: 'custpage_timesheet_sublist',
-                            name: 'custpage_hours' + d,
-                            line: i
-                        });
-                        var memo = request.getSublistValue({
-                            group: 'custpage_timesheet_sublist',
-                            name: 'custpage_memo' + d,
-                            line: i
-                        });
-
-                        if (hours > 0) {
-                            newTimesheet.setCurrentSublistValue({
-                                sublistId: 'timeitem',
-                                fieldId: 'hours' + d,
-                                value: parseFloat(hours)
-                            });
-
-                            newTimesheet.setCurrentSublistValue({
-                                sublistId: 'timeitem',
-                                fieldId: 'memo' + d,
-                                value: memo || '-'
-                            });
-                        }
-
-                    }
-
-                    newTimesheet.commitLine({sublistId: 'timeitem'})
-                }
-
-                var newTimeSheetId = newTimesheet.save()
-                log.debug('newTimeSheetId', newTimeSheetId)
-
-                var form = serverWidget.createForm({
-                    title: 'Timesheet Created Successfully'
-                });
-
-                form.addField({
-                    id: 'custpage_created_link',
-                    type: serverWidget.FieldType.INLINEHTML,
-                    label: ' '
-                }).defaultValue = '<a href="https://4696675.app.netsuite.com/app/accounting/transactions/time/weeklytimebill.nl?id=' + newTimeSheetId + '" target="_blank">View Created Timesheet</a>';
-
-                form.addButton({
-                    id: 'custpage_back',
-                    label: 'Back',
-                    functionName: 'history.back()'
-                });
-
-                var remainingUsage = runtime.getCurrentScript().getRemainingUsage();
-                log.debug('Remaining Usage', remainingUsage);
-
-                context.response.writePage(form)
-              }else{
-                context.response.write("ERROR: No lines selected!")
-              }
-
-            } catch (e) {
-                log.debug("Error in POST request for Copy Timesheet", e.message);
-                context.response.write({output: "Error: " + e.message});
             }
         }
+
+        var parsedWeekOf = format.parse({
+            value: weekOf,
+            type: format.Type.DATE
+        });
+
+        var employeeSearch = search.lookupFields({
+            type: search.Type.EMPLOYEE,
+            id: employeeId,
+            columns: ['custentity10', 'custentity_bc_tm_billing_class_emp']
+        });
+
+        var laborCodeId = firstSelectValue(employeeSearch.custentity10);
+        var billingClass = firstSelectValue(employeeSearch.custentity_bc_tm_billing_class_emp);
+
+        var newTimesheet = record.create({
+            type: record.Type.TIME_SHEET,
+            isDynamic: false
+        });
+
+        newTimesheet.setValue({ fieldId: 'employee', value: employeeId });
+        newTimesheet.setValue({ fieldId: 'trandate', value: parsedWeekOf });
+
+        var lineCount = request.getLineCount({ group: 'custpage_timesheet_sublist' });
+        log.debug('lineCount', lineCount);
+
+        if (lineCount <= 0) {
+            context.response.write("ERROR: No lines selected!");
+            return;
+        }
+
+        var targetLine = 0;
+
+        for (var i = 0; i < lineCount; i++) {
+            var projectId = request.getSublistValue({
+                group: 'custpage_timesheet_sublist',
+                name: 'custpage_project_id',
+                line: i
+            });
+
+            var costCodeId = request.getSublistValue({
+                group: 'custpage_timesheet_sublist',
+                name: 'custpage_cost_code_id',
+                line: i
+            });
+
+            var taskId = request.getSublistValue({
+                group: 'custpage_timesheet_sublist',
+                name: 'custpage_task_id',
+                line: i
+            });
+
+            var serviceItemId = request.getSublistValue({
+                group: 'custpage_timesheet_sublist',
+                name: 'custpage_item_id',
+                line: i
+            });
+
+            if (!hasValue(serviceItemId)) {
+                log.debug('Skipping line without service item', i);
+                continue;
+            }
+
+            var isBillable = request.getSublistValue({
+                group: 'custpage_timesheet_sublist',
+                name: 'custpage_billable',
+                line: i
+            });
+
+            var isNonBillable = request.getSublistValue({
+                group: 'custpage_timesheet_sublist',
+                name: 'custpage_nonbillable',
+                line: i
+            });
+
+            var isNonBillableTm = request.getSublistValue({
+                group: 'custpage_timesheet_sublist',
+                name: 'custpage_nonbillable_tm',
+                line: i
+            });
+
+            var timeType = request.getSublistValue({
+                group: 'custpage_timesheet_sublist',
+                name: 'custpage_time_type_id',
+                line: i
+            });
+
+            var shiftId = request.getSublistValue({
+                group: 'custpage_timesheet_sublist',
+                name: 'custpage_shift_id',
+                line: i
+            });
+
+            var approvalStatus = request.getSublistValue({
+                group: 'custpage_timesheet_sublist',
+                name: 'custpage_approval_status',
+                line: i
+            });
+
+            var type = request.getSublistValue({
+                group: 'custpage_timesheet_sublist',
+                name: 'custpage_type',
+                line: i
+            });
+
+            setTimeLineValue(newTimesheet, 'cseg_bc_project', targetLine, projectId);
+            setTimeLineValue(newTimesheet, 'cseg_bc_cost_code', targetLine, costCodeId);
+            setTimeLineValue(newTimesheet, 'casetaskevent', targetLine, taskId);
+            setTimeLineValue(newTimesheet, 'item', targetLine, serviceItemId);
+            setTimeLineValue(newTimesheet, 'isbillable', targetLine, toBool(isBillable));
+            setTimeLineValue(newTimesheet, 'custcol_bc_billable_delete', targetLine, toBool(isNonBillable));
+            setTimeLineValue(newTimesheet, 'custcol_bc_tm_line_non_billable', targetLine, toBool(isNonBillableTm));
+            setTimeLineValue(newTimesheet, 'custcol_bc_time_type', targetLine, timeType);
+            setTimeLineValue(newTimesheet, 'custcol1', targetLine, laborCodeId);
+            setTimeLineValue(newTimesheet, 'billingclass', targetLine, billingClass);
+            setTimeLineValue(newTimesheet, 'custcol_bc_tm_billing_shift', targetLine, shiftId);
+            setTimeLineValue(newTimesheet, 'approvalstatus', targetLine, approvalStatus);
+            setTimeLineValue(newTimesheet, 'timetype', targetLine, type);
+
+            for (var d = 0; d <= 6; d++) {
+                var hours = request.getSublistValue({
+                    group: 'custpage_timesheet_sublist',
+                    name: 'custpage_hours' + d,
+                    line: i
+                });
+
+                var memo = request.getSublistValue({
+                    group: 'custpage_timesheet_sublist',
+                    name: 'custpage_memo' + d,
+                    line: i
+                });
+
+                var hoursNum = parseFloat(hours);
+
+                if (!isNaN(hoursNum) && hoursNum > 0) {
+                    setTimeLineValue(newTimesheet, 'hours' + d, targetLine, hoursNum);
+                    setTimeLineValue(newTimesheet, 'memo' + d, targetLine, hasValue(memo) ? memo : '-');
+                }
+            }
+
+            targetLine++;
+        }
+
+        if (targetLine === 0) {
+            context.response.write("ERROR: No valid time lines found!");
+            return;
+        }
+
+        var newTimeSheetId = newTimesheet.save({
+            enableSourcing: true,
+            ignoreMandatoryFields: false
+        });
+
+        log.debug('newTimeSheetId', newTimeSheetId);
+
+        var form = serverWidget.createForm({
+            title: 'Timesheet Created Successfully'
+        });
+
+        form.addField({
+            id: 'custpage_created_link',
+            type: serverWidget.FieldType.INLINEHTML,
+            label: ' '
+        }).defaultValue = '<a href="https://4696675.app.netsuite.com/app/accounting/transactions/time/weeklytimebill.nl?id=' + newTimeSheetId + '" target="_blank">View Created Timesheet</a>';
+
+        form.addButton({
+            id: 'custpage_back',
+            label: 'Back',
+            functionName: 'history.back()'
+        });
+
+        var remainingUsage = runtime.getCurrentScript().getRemainingUsage();
+        log.debug('Remaining Usage', remainingUsage);
+
+        context.response.writePage(form);
+
+    } catch (e) {
+        log.debug("Error in POST request for Copy Timesheet", e.message);
+        context.response.write({ output: "Error: " + e.message });
+    }
+}
     }
 
     return {onRequest: onRequest};
