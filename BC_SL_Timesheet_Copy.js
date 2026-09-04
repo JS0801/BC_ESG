@@ -393,7 +393,8 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
                 context.response.write({output: "Error: " + e.message});
             }
 
-        } else if (context.request.method === 'POST') {
+        } 
+         else if (context.request.method === 'POST') {
     try {
         log.debug('--- START POST ---', '--- START POST ---');
 
@@ -413,18 +414,30 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
             return value && Array.isArray(value) && value.length > 0 ? value[0].value : null;
         }
 
-        function setTimeLineValue(rec, fieldId, line, value) {
+        function getLineValue(name, line) {
+            return request.getSublistValue({
+                group: 'custpage_timesheet_sublist',
+                name: name,
+                line: line
+            });
+        }
+
+        function setValueIfPresent(rec, fieldId, value) {
             if (hasValue(value) || value === false || value === 0) {
-                rec.setSublistValue({
-                    sublistId: 'timeitem',
+                rec.setValue({
                     fieldId: fieldId,
-                    line: line,
                     value: value
                 });
             }
         }
 
-        var parsedWeekOf = format.parse({
+        function addDays(baseDate, days) {
+            var date = new Date(baseDate.getTime());
+            date.setDate(date.getDate() + days);
+            return date;
+        }
+
+        var weekStartDate = format.parse({
             value: weekOf,
             type: format.Type.DATE
         });
@@ -438,155 +451,99 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
         var laborCodeId = firstSelectValue(employeeSearch.custentity10);
         var billingClass = firstSelectValue(employeeSearch.custentity_bc_tm_billing_class_emp);
 
-        var newTimesheet = record.create({
-            type: record.Type.TIME_SHEET,
-            isDynamic: false
+        var lineCount = request.getLineCount({
+            group: 'custpage_timesheet_sublist'
         });
 
-        newTimesheet.setValue({ fieldId: 'employee', value: employeeId });
-        newTimesheet.setValue({ fieldId: 'trandate', value: parsedWeekOf });
-
-        var lineCount = request.getLineCount({ group: 'custpage_timesheet_sublist' });
         log.debug('lineCount', lineCount);
 
         if (lineCount <= 0) {
-            context.response.write("ERROR: No lines selected!");
+            context.response.write('ERROR: No lines selected!');
             return;
         }
 
-        var targetLine = 0;
+        var createdTimeEntryIds = [];
 
         for (var i = 0; i < lineCount; i++) {
-            var projectId = request.getSublistValue({
-                group: 'custpage_timesheet_sublist',
-                name: 'custpage_project_id',
-                line: i
-            });
-
-            var costCodeId = request.getSublistValue({
-                group: 'custpage_timesheet_sublist',
-                name: 'custpage_cost_code_id',
-                line: i
-            });
-
-            var taskId = request.getSublistValue({
-                group: 'custpage_timesheet_sublist',
-                name: 'custpage_task_id',
-                line: i
-            });
-
-            var serviceItemId = request.getSublistValue({
-                group: 'custpage_timesheet_sublist',
-                name: 'custpage_item_id',
-                line: i
-            });
+            var projectId = getLineValue('custpage_project_id', i);
+            var costCodeId = getLineValue('custpage_cost_code_id', i);
+            var taskId = getLineValue('custpage_task_id', i);
+            var serviceItemId = getLineValue('custpage_item_id', i);
+            var isBillable = getLineValue('custpage_billable', i);
+            var isNonBillable = getLineValue('custpage_nonbillable', i);
+            var isNonBillableTm = getLineValue('custpage_nonbillable_tm', i);
+            var timeType = getLineValue('custpage_time_type_id', i);
+            var shiftId = getLineValue('custpage_shift_id', i);
+            var approvalStatus = getLineValue('custpage_approval_status', i);
+            var type = getLineValue('custpage_type', i);
 
             if (!hasValue(serviceItemId)) {
                 log.debug('Skipping line without service item', i);
                 continue;
             }
 
-            var isBillable = request.getSublistValue({
-                group: 'custpage_timesheet_sublist',
-                name: 'custpage_billable',
-                line: i
-            });
-
-            var isNonBillable = request.getSublistValue({
-                group: 'custpage_timesheet_sublist',
-                name: 'custpage_nonbillable',
-                line: i
-            });
-
-            var isNonBillableTm = request.getSublistValue({
-                group: 'custpage_timesheet_sublist',
-                name: 'custpage_nonbillable_tm',
-                line: i
-            });
-
-            var timeType = request.getSublistValue({
-                group: 'custpage_timesheet_sublist',
-                name: 'custpage_time_type_id',
-                line: i
-            });
-
-            var shiftId = request.getSublistValue({
-                group: 'custpage_timesheet_sublist',
-                name: 'custpage_shift_id',
-                line: i
-            });
-
-            var approvalStatus = request.getSublistValue({
-                group: 'custpage_timesheet_sublist',
-                name: 'custpage_approval_status',
-                line: i
-            });
-
-            var type = request.getSublistValue({
-                group: 'custpage_timesheet_sublist',
-                name: 'custpage_type',
-                line: i
-            });
-
-            setTimeLineValue(newTimesheet, 'cseg_bc_project', targetLine, projectId);
-            setTimeLineValue(newTimesheet, 'cseg_bc_cost_code', targetLine, costCodeId);
-            setTimeLineValue(newTimesheet, 'casetaskevent', targetLine, taskId);
-            setTimeLineValue(newTimesheet, 'item', targetLine, serviceItemId);
-            setTimeLineValue(newTimesheet, 'isbillable', targetLine, toBool(isBillable));
-            setTimeLineValue(newTimesheet, 'custcol_bc_billable_delete', targetLine, toBool(isNonBillable));
-            setTimeLineValue(newTimesheet, 'custcol_bc_tm_line_non_billable', targetLine, toBool(isNonBillableTm));
-            setTimeLineValue(newTimesheet, 'custcol_bc_time_type', targetLine, timeType);
-            setTimeLineValue(newTimesheet, 'custcol1', targetLine, laborCodeId);
-            setTimeLineValue(newTimesheet, 'billingclass', targetLine, billingClass);
-            setTimeLineValue(newTimesheet, 'custcol_bc_tm_billing_shift', targetLine, shiftId);
-            setTimeLineValue(newTimesheet, 'approvalstatus', targetLine, approvalStatus);
-            setTimeLineValue(newTimesheet, 'timetype', targetLine, type);
-
             for (var d = 0; d <= 6; d++) {
-                var hours = request.getSublistValue({
-                    group: 'custpage_timesheet_sublist',
-                    name: 'custpage_hours' + d,
-                    line: i
-                });
-
-                var memo = request.getSublistValue({
-                    group: 'custpage_timesheet_sublist',
-                    name: 'custpage_memo' + d,
-                    line: i
-                });
-
+                var hours = getLineValue('custpage_hours' + d, i);
+                var memo = getLineValue('custpage_memo' + d, i);
                 var hoursNum = parseFloat(hours);
 
-                if (!isNaN(hoursNum) && hoursNum > 0) {
-                    setTimeLineValue(newTimesheet, 'hours' + d, targetLine, hoursNum);
-                    setTimeLineValue(newTimesheet, 'memo' + d, targetLine, hasValue(memo) ? memo : '-');
+                if (isNaN(hoursNum) || hoursNum <= 0) {
+                    continue;
                 }
-            }
 
-            targetLine++;
+                var timeEntry = record.create({
+                    type: record.Type.TIME_BILL,
+                    isDynamic: false
+                });
+
+                setValueIfPresent(timeEntry, 'employee', employeeId);
+                setValueIfPresent(timeEntry, 'trandate', addDays(weekStartDate, d));
+
+                // If your NetSuite customer field is different from cseg_bc_project,
+                // replace this customer value with the actual customer/project internal ID.
+                setValueIfPresent(timeEntry, 'customer', projectId);
+
+                setValueIfPresent(timeEntry, 'item', serviceItemId);
+                setValueIfPresent(timeEntry, 'hours', hoursNum);
+                setValueIfPresent(timeEntry, 'memo', hasValue(memo) ? memo : '-');
+
+                setValueIfPresent(timeEntry, 'cseg_bc_project', projectId);
+                setValueIfPresent(timeEntry, 'cseg_bc_cost_code', costCodeId);
+                setValueIfPresent(timeEntry, 'casetaskevent', taskId);
+                setValueIfPresent(timeEntry, 'isbillable', toBool(isBillable));
+                setValueIfPresent(timeEntry, 'custcol_bc_billable_delete', toBool(isNonBillable));
+                setValueIfPresent(timeEntry, 'custcol_bc_tm_line_non_billable', toBool(isNonBillableTm));
+                setValueIfPresent(timeEntry, 'custcol_bc_time_type', timeType);
+                setValueIfPresent(timeEntry, 'custcol1', laborCodeId);
+                setValueIfPresent(timeEntry, 'billingclass', billingClass);
+                setValueIfPresent(timeEntry, 'custcol_bc_tm_billing_shift', shiftId);
+                setValueIfPresent(timeEntry, 'approvalstatus', approvalStatus);
+                setValueIfPresent(timeEntry, 'timetype', type);
+
+                var timeEntryId = timeEntry.save({
+                    enableSourcing: true,
+                    ignoreMandatoryFields: false
+                });
+
+                createdTimeEntryIds.push(timeEntryId);
+                log.debug('Time Entry Created', timeEntryId);
+            }
         }
 
-        if (targetLine === 0) {
-            context.response.write("ERROR: No valid time lines found!");
+        if (createdTimeEntryIds.length === 0) {
+            context.response.write('ERROR: No valid time entries found!');
             return;
         }
 
-        var newTimeSheetId = newTimesheet.save({
-            enableSourcing: true,
-            ignoreMandatoryFields: false
-        });
-
-        log.debug('newTimeSheetId', newTimeSheetId);
-
         var form = serverWidget.createForm({
-            title: 'Timesheet Created Successfully'
+            title: 'Time Entries Created Successfully'
         });
 
         form.addField({
-            id: 'custpage_created_link',
+            id: 'custpage_created_message',
             type: serverWidget.FieldType.INLINEHTML,
             label: ' '
-        }).defaultValue = '<a href="https://4696675.app.netsuite.com/app/accounting/transactions/time/weeklytimebill.nl?id=' + newTimeSheetId + '" target="_blank">View Created Timesheet</a>';
+        }).defaultValue = '<div>Created ' + createdTimeEntryIds.length + ' time entries.</div>';
 
         form.addButton({
             id: 'custpage_back',
@@ -594,14 +551,14 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
             functionName: 'history.back()'
         });
 
-        var remainingUsage = runtime.getCurrentScript().getRemainingUsage();
-        log.debug('Remaining Usage', remainingUsage);
+        log.debug('Created Time Entry IDs', createdTimeEntryIds.join(', '));
+        log.debug('Remaining Usage', runtime.getCurrentScript().getRemainingUsage());
 
         context.response.writePage(form);
 
     } catch (e) {
-        log.debug("Error in POST request for Copy Timesheet", e.message);
-        context.response.write({ output: "Error: " + e.message });
+        log.debug('Error in POST request for Copy Time Entries', e.message);
+        context.response.write({ output: 'Error: ' + e.message });
     }
 }
     }
