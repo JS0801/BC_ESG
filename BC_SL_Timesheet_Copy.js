@@ -422,6 +422,17 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
             });
         }
 
+      function cleanSelectId(value) {
+    if (!hasValue(value)) return null;
+
+    var num = Number(value);
+    if (!isNaN(num)) {
+        return parseInt(num, 10);
+    }
+
+    return value;
+}
+
         function setValueIfPresent(rec, fieldId, value) {
             if (hasValue(value) || value === false || value === 0) {
                 rec.setValue({
@@ -474,8 +485,8 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
             var isNonBillableTm = getLineValue('custpage_nonbillable_tm', i);
             var timeType = getLineValue('custpage_time_type_id', i);
             var shiftId = getLineValue('custpage_shift_id', i);
-            var approvalStatus = getLineValue('custpage_approval_status', i);
-            var type = getLineValue('custpage_type', i);
+var approvalStatus = cleanSelectId(getLineValue('custpage_approval_status', i));
+          var type = getLineValue('custpage_type', i);
 
             if (!hasValue(serviceItemId)) {
                 log.debug('Skipping line without service item', i);
