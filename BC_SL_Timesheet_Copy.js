@@ -485,8 +485,8 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
             var isNonBillableTm = getLineValue('custpage_nonbillable_tm', i);
             var timeType = getLineValue('custpage_time_type_id', i);
             var shiftId = getLineValue('custpage_shift_id', i);
-var approvalStatus = cleanSelectId(getLineValue('custpage_approval_status', i));
-          var type = getLineValue('custpage_type', i);
+            var approvalStatus = cleanSelectId(getLineValue('custpage_approval_status', i));
+            var type = getLineValue('custpage_type', i);
 
             if (!hasValue(serviceItemId)) {
                 log.debug('Skipping line without service item', i);
@@ -506,6 +506,7 @@ var approvalStatus = cleanSelectId(getLineValue('custpage_approval_status', i));
                     type: record.Type.TIME_BILL,
                     isDynamic: true
                 });
+                log.debug('employeeId', employeeId)
 
                 setValueIfPresent(timeEntry, 'employee', employeeId);
                 setValueIfPresent(timeEntry, 'trandate', addDays(weekStartDate, d));
