@@ -394,7 +394,7 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
             }
 
         } 
-         else if (context.request.method === 'POST') {
+         } else if (context.request.method === 'POST') {
     try {
         log.debug('--- START POST ---', '--- START POST ---');
 
@@ -410,6 +410,15 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
             return value === true || value === 'T' || value === 'true';
         }
 
+        function cleanSelectId(value) {
+            if (!hasValue(value)) return null;
+
+            var num = Number(value);
+            if (!isNaN(num)) return parseInt(num, 10);
+
+            return value;
+        }
+
         function firstSelectValue(value) {
             return value && Array.isArray(value) && value.length > 0 ? value[0].value : null;
         }
@@ -421,17 +430,6 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
                 line: line
             });
         }
-
-      function cleanSelectId(value) {
-    if (!hasValue(value)) return null;
-
-    var num = Number(value);
-    if (!isNaN(num)) {
-        return parseInt(num, 10);
-    }
-
-    return value;
-}
 
         function setValueIfPresent(rec, fieldId, value) {
             if (hasValue(value) || value === false || value === 0) {
@@ -466,8 +464,6 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
             group: 'custpage_timesheet_sublist'
         });
 
-        log.debug('lineCount', lineCount);
-
         if (lineCount <= 0) {
             context.response.write('ERROR: No lines selected!');
             return;
@@ -476,52 +472,36 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
         var createdTimeEntryIds = [];
 
         for (var i = 0; i < lineCount; i++) {
-            var projectId = getLineValue('custpage_project_id', i);
-            var costCodeId = getLineValue('custpage_cost_code_id', i);
-            var taskId = getLineValue('custpage_task_id', i);
-            var serviceItemId = getLineValue('custpage_item_id', i);
+            var projectId = cleanSelectId(getLineValue('custpage_project_id', i));
+            var costCodeId = cleanSelectId(getLineValue('custpage_cost_code_id', i));
+            var taskId = cleanSelectId(getLineValue('custpage_task_id', i));
+            var serviceItemId = cleanSelectId(getLineValue('custpage_item_id', i));
             var isBillable = getLineValue('custpage_billable', i);
             var isNonBillable = getLineValue('custpage_nonbillable', i);
             var isNonBillableTm = getLineValue('custpage_nonbillable_tm', i);
-            var timeType = getLineValue('custpage_time_type_id', i);
-            var shiftId = getLineValue('custpage_shift_id', i);
+            var timeType = cleanSelectId(getLineValue('custpage_time_type_id', i));
+            var shiftId = cleanSelectId(getLineValue('custpage_shift_id', i));
             var approvalStatus = cleanSelectId(getLineValue('custpage_approval_status', i));
-            var type = getLineValue('custpage_type', i);
-
-            if (!hasValue(serviceItemId)) {
-                log.debug('Skipping line without service item', i);
-                continue;
-            }
+            var type = cleanSelectId(getLineValue('custpage_type', i));
 
             for (var d = 0; d <= 6; d++) {
                 var hours = getLineValue('custpage_hours' + d, i);
                 var memo = getLineValue('custpage_memo' + d, i);
                 var hoursNum = parseFloat(hours);
 
-                if (isNaN(hoursNum) || hoursNum <= 0) {
-                    continue;
-                }
+                if (isNaN(hoursNum) || hoursNum <= 0) continue;
 
                 var timeEntry = record.create({
                     type: record.Type.TIME_BILL,
-                    isDynamic: true
+                    isDynamic: false
                 });
-                log.debug('employeeId', employeeId)
 
                 setValueIfPresent(timeEntry, 'employee', employeeId);
                 setValueIfPresent(timeEntry, 'trandate', addDays(weekStartDate, d));
-
-                // If your NetSuite customer field is different from cseg_bc_project,
-                // replace this customer value with the actual customer/project internal ID.
-                setValueIfPresent(timeEntry, 'customer', projectId);
-
-                setValueIfPresent(timeEntry, 'item', serviceItemId);
-                setValueIfPresent(timeEntry, 'hours', hoursNum);
-                setValueIfPresent(timeEntry, 'memo', hasValue(memo) ? memo : '-');
-
                 setValueIfPresent(timeEntry, 'cseg_bc_project', projectId);
                 setValueIfPresent(timeEntry, 'cseg_bc_cost_code', costCodeId);
                 setValueIfPresent(timeEntry, 'casetaskevent', taskId);
+                setValueIfPresent(timeEntry, 'item', serviceItemId);
                 setValueIfPresent(timeEntry, 'isbillable', toBool(isBillable));
                 setValueIfPresent(timeEntry, 'custcol_bc_billable_delete', toBool(isNonBillable));
                 setValueIfPresent(timeEntry, 'custcol_bc_tm_line_non_billable', toBool(isNonBillableTm));
@@ -531,6 +511,8 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
                 setValueIfPresent(timeEntry, 'custcol_bc_tm_billing_shift', shiftId);
                 setValueIfPresent(timeEntry, 'approvalstatus', approvalStatus);
                 setValueIfPresent(timeEntry, 'timetype', type);
+                setValueIfPresent(timeEntry, 'hours', hoursNum);
+                setValueIfPresent(timeEntry, 'memo', hasValue(memo) ? memo : '-');
 
                 var timeEntryId = timeEntry.save({
                     enableSourcing: true,
@@ -538,7 +520,6 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
                 });
 
                 createdTimeEntryIds.push(timeEntryId);
-                log.debug('Time Entry Created', timeEntryId);
             }
         }
 
@@ -556,15 +537,6 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
             type: serverWidget.FieldType.INLINEHTML,
             label: ' '
         }).defaultValue = '<div>Created ' + createdTimeEntryIds.length + ' time entries.</div>';
-
-        form.addButton({
-            id: 'custpage_back',
-            label: 'Back',
-            functionName: 'history.back()'
-        });
-
-        log.debug('Created Time Entry IDs', createdTimeEntryIds.join(', '));
-        log.debug('Remaining Usage', runtime.getCurrentScript().getRemainingUsage());
 
         context.response.writePage(form);
 
