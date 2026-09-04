@@ -394,7 +394,7 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
             }
 
         } 
-         } else if (context.request.method === 'POST') {
+          else if (context.request.method === 'POST') {
     try {
         log.debug('--- START POST ---', '--- START POST ---');
 
