@@ -393,8 +393,8 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
                 context.response.write({output: "Error: " + e.message});
             }
 
-        } 
-          else if (context.request.method === 'POST') {
+        }
+         else if (context.request.method === 'POST') {
     try {
         log.debug('--- START POST ---', '--- START POST ---');
 
@@ -464,12 +464,16 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
             group: 'custpage_timesheet_sublist'
         });
 
+        log.debug('lineCount', lineCount);
+
         if (lineCount <= 0) {
             context.response.write('ERROR: No lines selected!');
             return;
         }
 
         var createdTimeEntryIds = [];
+        var lastTimeEntryId = null;
+        var createdTimesheetId = null;
 
         for (var i = 0; i < lineCount; i++) {
             var projectId = cleanSelectId(getLineValue('custpage_project_id', i));
@@ -489,7 +493,9 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
                 var memo = getLineValue('custpage_memo' + d, i);
                 var hoursNum = parseFloat(hours);
 
-                if (isNaN(hoursNum) || hoursNum <= 0) continue;
+                if (isNaN(hoursNum) || hoursNum <= 0) {
+                    continue;
+                }
 
                 var timeEntry = record.create({
                     type: record.Type.TIME_BILL,
@@ -520,12 +526,28 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
                 });
 
                 createdTimeEntryIds.push(timeEntryId);
+                lastTimeEntryId = timeEntryId;
+
+                log.debug('Time Entry Created', timeEntryId);
             }
         }
 
         if (createdTimeEntryIds.length === 0) {
             context.response.write('ERROR: No valid time entries found!');
             return;
+        }
+
+        if (lastTimeEntryId) {
+            var timeEntryLookup = search.lookupFields({
+                type: 'timebill',
+                id: lastTimeEntryId,
+                columns: ['timesheet']
+            });
+
+            createdTimesheetId = firstSelectValue(timeEntryLookup.timesheet);
+
+            log.debug('Last Time Entry ID', lastTimeEntryId);
+            log.debug('Created Timesheet ID', createdTimesheetId);
         }
 
         var form = serverWidget.createForm({
@@ -536,7 +558,19 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
             id: 'custpage_created_message',
             type: serverWidget.FieldType.INLINEHTML,
             label: ' '
-        }).defaultValue = '<div>Created ' + createdTimeEntryIds.length + ' time entries.</div>';
+        }).defaultValue =
+            '<div>Created ' + createdTimeEntryIds.length + ' time entries.</div>' +
+            '<div>Timesheet Internal ID: ' + (createdTimesheetId || 'Not found') + '</div>' +
+            '<div>Last Time Entry ID: ' + lastTimeEntryId + '</div>';
+
+        form.addButton({
+            id: 'custpage_back',
+            label: 'Back',
+            functionName: 'history.back()'
+        });
+
+        log.debug('Created Time Entry IDs', createdTimeEntryIds.join(', '));
+        log.debug('Remaining Usage', runtime.getCurrentScript().getRemainingUsage());
 
         context.response.writePage(form);
 
