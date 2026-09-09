@@ -554,14 +554,22 @@ define(['N/record', 'N/ui/serverWidget', 'N/redirect', 'N/search', 'N/runtime', 
             title: 'Time Entries Created Successfully'
         });
 
-        form.addField({
-            id: 'custpage_created_message',
-            type: serverWidget.FieldType.INLINEHTML,
-            label: ' '
-        }).defaultValue =
-            '<div>Created ' + createdTimeEntryIds.length + ' time entries.</div>' +
-            '<div>Timesheet Internal ID: ' + (createdTimesheetId || 'Not found') + '</div>' +
-            '<div>Last Time Entry ID: ' + lastTimeEntryId + '</div>';
+var createdLinkHtml = '<div>Created ' + createdTimeEntryIds.length + ' time entries.</div>';
+
+if (createdTimesheetId) {
+    createdLinkHtml +=
+        '<a href="https://4696675.app.netsuite.com/app/accounting/transactions/time/weeklytimebill.nl?id=' +
+        createdTimesheetId +
+        '" target="_blank">View Created Timesheet</a>';
+} else {
+    createdLinkHtml += '<div>Timesheet Internal ID: Not found</div>';
+}
+
+form.addField({
+    id: 'custpage_created_link',
+    type: serverWidget.FieldType.INLINEHTML,
+    label: ' '
+}).defaultValue = createdLinkHtml;
 
         form.addButton({
             id: 'custpage_back',
