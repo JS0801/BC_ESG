@@ -6,12 +6,13 @@ define(['N/record', 'N/runtime', 'N/email', 'N/url', 'N/search'], function (reco
 
     function onAction(context) {
         var vbRec = context.newRecord;
+        var cfg = getApprovalConfig(vbRec.type);
         /*var vbRec = record.load({
-            type: record.Type.VENDOR_BILL,
+            type: cfg.recordType,
             id: context.newRecord.id,
             isDynamic: false
         });*/
-        var sublists = ['item', 'expense'];
+        var sublists = cfg.sublists;
         var pmList = [];
         var hasAnyProject = false;
 
@@ -51,13 +52,22 @@ define(['N/record', 'N/runtime', 'N/email', 'N/url', 'N/search'], function (reco
                             value: '1' // Pending
                         });*/
 
-                    vbRec.selectLine({sublistId: sublistId, line: i});
-                    vbRec.setCurrentSublistValue({
-                        sublistId: sublistId,
-                        fieldId: 'custcol_bc_approval_status',
-                        value: statusToSet
-                    });
-                    vbRec.commitLine({sublistId: sublistId});
+                    if (cfg.isExpenseReport && !vbRec.isDynamic) {
+                        vbRec.setSublistValue({
+                            sublistId: sublistId,
+                            fieldId: 'custcol_bc_approval_status',
+                            line: i,
+                            value: statusToSet
+                        });
+                    } else {
+                        vbRec.selectLine({sublistId: sublistId, line: i});
+                        vbRec.setCurrentSublistValue({
+                            sublistId: sublistId,
+                            fieldId: 'custcol_bc_approval_status',
+                            value: statusToSet
+                        });
+                        vbRec.commitLine({sublistId: sublistId});
+                    }
 
                     /*var alreadyAdded = false;
                     for (var j = 0; j < pmList.length; j++) {
@@ -74,11 +84,11 @@ define(['N/record', 'N/runtime', 'N/email', 'N/url', 'N/search'], function (reco
 
             // Set header flags
             var allAutoApproved = (pmList.length === 0);
-            vbRec.setValue({fieldId: 'custbody_bc_vb_all_approved', value: false});
-            vbRec.setValue({fieldId: 'custbody_bc_vb_all_rejected', value: false});
-            vbRec.setValue({fieldId: 'custbody_bc_all_no_project', value: !hasAnyProject});
+            vbRec.setValue({fieldId: cfg.allApprovedField, value: false});
+            vbRec.setValue({fieldId: cfg.allRejectedField, value: false});
+            vbRec.setValue({fieldId: cfg.allNoProjectField, value: !hasAnyProject});
             vbRec.setValue({fieldId: 'approvalstatus', value: 1});
-            vbRec.setValue({fieldId: 'custbody_bc_vb_wf_state', value: 2}); //Pending Approval wf state
+            vbRec.setValue({fieldId: cfg.stateField, value: 2}); //Pending Approval wf state
 
             // Save the Vendor Bill
             // var vbId = vbRec.save({ignoreMandatoryFields: true});
@@ -114,8 +124,8 @@ define(['N/record', 'N/runtime', 'N/email', 'N/url', 'N/search'], function (reco
 
                     // Build email HTML body for this PM
                     var htmlBody = 'Hi,<br/><br/>';
-                    htmlBody += 'You have lines pending your approval for Vendor Bill <b>' + vbTranId + '</b>:<br/><br/>';
-                    htmlBody += '<p>View the Vendor Bill: <a href="' + vbUrl + '" target="_blank">' + vbTranId + '</a></p>';
+                    htmlBody += 'You have lines pending your approval for ' + cfg.label + ' <b>' + vbTranId + '</b>:<br/><br/>';
+                    htmlBody += '<p>View the ' + cfg.label + ': <a href="' + vbUrl + '" target="_blank">' + vbTranId + '</a></p>';
 
                     htmlBody += '<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; font-size: 12px;">';
                     htmlBody += '<tr style="background-color:#f2f2f2;">';
@@ -171,7 +181,9 @@ define(['N/record', 'N/runtime', 'N/email', 'N/url', 'N/search'], function (reco
                     }
 
                     htmlBody += '</table>';
+                    if (!cfg.isExpenseReport) {
                     htmlBody += '<p style="font-size: 10px; color: #555;"><a href="https://4696675.app.netsuite.com/app/common/search/searchresults.nl?searchid=933&whence=" target="_blank">View all Vendor Bills pending your approval</a></p>';
+                    }
 
 
                     try {
@@ -179,7 +191,7 @@ define(['N/record', 'N/runtime', 'N/email', 'N/url', 'N/search'], function (reco
                             //author: authorId,
                             author: 7173, // Accounts Payable
                             recipients: [pmId],
-                            subject: 'Vendor Bill ' + vbTranId + ' : Awaiting Your Approval',
+                            subject: cfg.label + ' ' + vbTranId + ' : Awaiting Your Approval',
                             body: htmlBody,
                             isHtml: true
                         });
@@ -197,44 +209,27 @@ define(['N/record', 'N/runtime', 'N/email', 'N/url', 'N/search'], function (reco
             log.debug('Send email error', e)
         }
     }
-  function getApprovalConfig(recordType) {
-    var type = String(recordType || 'vendorbill').toLowerCase();
 
-    if (type !== 'vendorbill' && type !== 'expensereport') {
-        throw new Error('Unsupported transaction type: ' + type);
+
+    // Route Expense Reports to their own fields; legacy bill URLs default to Vendor Bill.
+    function getApprovalConfig(recordType) {
+        var type = String(recordType || 'vendorbill').toLowerCase();
+        if (type !== 'vendorbill' && type !== 'expensereport') {
+            throw new Error('Unsupported transaction type: ' + type);
+        }
+        var isExpenseReport = type === 'expensereport';
+        return {
+            recordType: type,
+            isExpenseReport: isExpenseReport,
+            label: isExpenseReport ? 'Expense Report' : 'Vendor Bill',
+            sublists: isExpenseReport ? ['expense'] : ['item', 'expense'],
+            stateField: isExpenseReport ? 'custbody_bc_er_wf_state' : 'custbody_bc_vb_wf_state',
+            allApprovedField: isExpenseReport ? 'custbody_bc_er_all_approved' : 'custbody_bc_vb_all_approved',
+            allRejectedField: isExpenseReport ? 'custbody_bc_er_all_rejected' : 'custbody_bc_vb_all_rejected',
+            allNoProjectField: isExpenseReport ? 'custbody_bc_er_all_no_project' : 'custbody_bc_all_no_project',
+            expenseAccountField: isExpenseReport ? 'expenseaccount' : 'account'
+        };
     }
-
-    var isExpenseReport = type === 'expensereport';
-
-    return {
-        recordType: type,
-        label: isExpenseReport ? 'Expense Report' : 'Vendor Bill',
-
-        sublists: isExpenseReport
-            ? ['expense']
-            : ['item', 'expense'],
-
-        stateField: isExpenseReport
-            ? 'custbody_bc_er_wf_state'
-            : 'custbody_bc_vb_wf_state',
-
-        allApprovedField: isExpenseReport
-            ? 'custbody_bc_er_all_approved'
-            : 'custbody_bc_vb_all_approved',
-
-        allRejectedField: isExpenseReport
-            ? 'custbody_bc_er_all_rejected'
-            : 'custbody_bc_vb_all_rejected',
-
-        allNoProjectField: isExpenseReport
-            ? 'custbody_bc_er_all_no_project'
-            : 'custbody_bc_all_no_project',
-
-        expenseAccountField: isExpenseReport
-            ? 'expenseaccount'
-            : 'account'
-    };
-}
 
     return {onAction};
 });
