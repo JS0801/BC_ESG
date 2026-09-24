@@ -290,5 +290,44 @@ define([
         }
     }
 
+  function getApprovalConfig(recordType) {
+    var type = String(recordType || 'vendorbill').toLowerCase();
+
+    if (type !== 'vendorbill' && type !== 'expensereport') {
+        throw new Error('Unsupported transaction type: ' + type);
+    }
+
+    var isExpenseReport = type === 'expensereport';
+
+    return {
+        recordType: type,
+        label: isExpenseReport ? 'Expense Report' : 'Vendor Bill',
+
+        sublists: isExpenseReport
+            ? ['expense']
+            : ['item', 'expense'],
+
+        stateField: isExpenseReport
+            ? 'custbody_bc_er_wf_state'
+            : 'custbody_bc_vb_wf_state',
+
+        allApprovedField: isExpenseReport
+            ? 'custbody_bc_er_all_approved'
+            : 'custbody_bc_vb_all_approved',
+
+        allRejectedField: isExpenseReport
+            ? 'custbody_bc_er_all_rejected'
+            : 'custbody_bc_vb_all_rejected',
+
+        allNoProjectField: isExpenseReport
+            ? 'custbody_bc_er_all_no_project'
+            : 'custbody_bc_all_no_project',
+
+        expenseAccountField: isExpenseReport
+            ? 'expenseaccount'
+            : 'account'
+    };
+}
+
     return {onRequest};
 });
