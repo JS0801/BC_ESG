@@ -277,7 +277,11 @@ define(['N/ui/serverWidget', 'N/record', 'N/runtime', 'N/url', 'N/email', 'N/red
                         }
                     }
                 });
-                log.debug('allApproved', allApproved)                
+                log.debug('allApproved', allApproved)              
+
+                log.debug('recordType', cfg.recordType) 
+                log.debug('vbId', vbId) 
+                log.debug('allApprovedField', cfg.allApprovedField) 
 
                 if (allApproved) {
                     record.submitFields({
