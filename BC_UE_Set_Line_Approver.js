@@ -9,6 +9,7 @@ define(['N/record', 'N/runtime', 'N/url'], function (record, runtime, url) {
 
             var form = context.form;
             var rec = context.newRecord;
+            var cfg = getApprovalConfig(rec.type);
             log.debug('VB ID', rec.id)
 
             // === Current User Info ===
@@ -18,7 +19,7 @@ define(['N/record', 'N/runtime', 'N/url'], function (record, runtime, url) {
             log.debug('Current User', { id: currentUserId, role: currentUserRole });
 
             // === Record Info ===
-            var currentWfState = rec.getValue('custbody_bc_vb_wf_state');
+            var currentWfState = rec.getValue(cfg.stateField);
             var creator = rec.getValue('custbody_bc_created_by');
             var isCreator = (currentUserId == creator);
 
@@ -38,7 +39,7 @@ define(['N/record', 'N/runtime', 'N/url'], function (record, runtime, url) {
             var hasPendingLines = false;
             var isPMWithPendingLines = false;
 
-            var sublists = ['item', 'expense'];
+            var sublists = cfg.sublists;
             for (var s = 0; s < sublists.length; s++) {
                 var sublistId = sublists[s];
                 var lineCount = rec.getLineCount({ sublistId: sublistId });
@@ -139,7 +140,9 @@ define(['N/record', 'N/runtime', 'N/url'], function (record, runtime, url) {
                 var approveSuiteletUrl = url.resolveScript({
                     scriptId: 'customscript_bc_sl_app_rej_vb',
                     deploymentId: 'customdeploy_bc_sl_app_rej_vb',
-                    params: { billid: rec.id }
+                    params: cfg.isExpenseReport
+                        ? { billid: rec.id, recordtype: cfg.recordType }
+                        : { billid: rec.id }
                 });
 
                 form.addButton({
@@ -161,7 +164,9 @@ define(['N/record', 'N/runtime', 'N/url'], function (record, runtime, url) {
                 var resubmitSuiteletUrl = url.resolveScript({
                     scriptId: 'customscript_bc_sl_vb_resubmit_lines',
                     deploymentId: 'customdeploy_bc_sl_vb_resubmit_lines',
-                    params: { billid: rec.id }
+                    params: cfg.isExpenseReport
+                        ? { billid: rec.id, recordtype: cfg.recordType }
+                        : { billid: rec.id }
                 });
 
                 form.addButton({
@@ -180,10 +185,11 @@ define(['N/record', 'N/runtime', 'N/url'], function (record, runtime, url) {
             context.type !== context.UserEventType.EDIT) return;
 
         var vbRec = context.newRecord;
-        var sublists = ['item', 'expense'];
+        var cfg = getApprovalConfig(vbRec.type);
+        var sublists = cfg.sublists;
 
         // check header wf state
-        var currentWfState = vbRec.getValue('custbody_bc_vb_wf_state');
+        var currentWfState = vbRec.getValue(cfg.stateField);
 
         for (var x = 0; x < sublists.length; x++) {
             var sublistId = sublists[x];
@@ -266,49 +272,30 @@ define(['N/record', 'N/runtime', 'N/url'], function (record, runtime, url) {
         }
     }
 
-
-  function getApprovalConfig(recordType) {
-    var type = String(recordType || 'vendorbill').toLowerCase();
-
-    if (type !== 'vendorbill' && type !== 'expensereport') {
-        throw new Error('Unsupported transaction type: ' + type);
-    }
-
-    var isExpenseReport = type === 'expensereport';
-
-    return {
-        recordType: type,
-        label: isExpenseReport ? 'Expense Report' : 'Vendor Bill',
-
-        sublists: isExpenseReport
-            ? ['expense']
-            : ['item', 'expense'],
-
-        stateField: isExpenseReport
-            ? 'custbody_bc_er_wf_state'
-            : 'custbody_bc_vb_wf_state',
-
-        allApprovedField: isExpenseReport
-            ? 'custbody_bc_er_all_approved'
-            : 'custbody_bc_vb_all_approved',
-
-        allRejectedField: isExpenseReport
-            ? 'custbody_bc_er_all_rejected'
-            : 'custbody_bc_vb_all_rejected',
-
-        allNoProjectField: isExpenseReport
-            ? 'custbody_bc_er_all_no_project'
-            : 'custbody_bc_all_no_project',
-
-        expenseAccountField: isExpenseReport
-            ? 'expenseaccount'
-            : 'account'
-    };
-}
-
     function isPMRole(roleId) {
         var pmRoles = [1318, 1321, 1424, 1928]; //PM role internal IDs
         return pmRoles.includes(parseInt(roleId, 10));
+    }
+
+
+    // Route Expense Reports to their own fields; legacy bill URLs default to Vendor Bill.
+    function getApprovalConfig(recordType) {
+        var type = String(recordType || 'vendorbill').toLowerCase();
+        if (type !== 'vendorbill' && type !== 'expensereport') {
+            throw new Error('Unsupported transaction type: ' + type);
+        }
+        var isExpenseReport = type === 'expensereport';
+        return {
+            recordType: type,
+            isExpenseReport: isExpenseReport,
+            label: isExpenseReport ? 'Expense Report' : 'Vendor Bill',
+            sublists: isExpenseReport ? ['expense'] : ['item', 'expense'],
+            stateField: isExpenseReport ? 'custbody_bc_er_wf_state' : 'custbody_bc_vb_wf_state',
+            allApprovedField: isExpenseReport ? 'custbody_bc_er_all_approved' : 'custbody_bc_vb_all_approved',
+            allRejectedField: isExpenseReport ? 'custbody_bc_er_all_rejected' : 'custbody_bc_vb_all_rejected',
+            allNoProjectField: isExpenseReport ? 'custbody_bc_er_all_no_project' : 'custbody_bc_all_no_project',
+            expenseAccountField: isExpenseReport ? 'expenseaccount' : 'account'
+        };
     }
 
     return {
