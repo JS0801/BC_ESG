@@ -9,6 +9,11 @@ define(['N/ui/serverWidget', 'N/record', 'N/runtime', 'N/url', 'N/email', 'N/red
         var response = context.response;
         var vbId = request.parameters.billid;
         var action = request.parameters.action;
+        var cfg = getApprovalConfig(
+            request.parameters.custpage_record_type ||
+            request.parameters.recordtype ||
+            'vendorbill'
+        );
 
         var currentUser = runtime.getCurrentUser();
         var currentUserId = currentUser.id;
@@ -16,7 +21,16 @@ define(['N/ui/serverWidget', 'N/record', 'N/runtime', 'N/url', 'N/email', 'N/red
 
         if (request.method === 'GET') {
             try {
-                var form = ui.createForm({title: 'Vendor Bill Lines for Approval'});
+                var form = ui.createForm({title: cfg.label + ' Lines for Approval'});
+                // Only the Expense Report path needs a type marker; existing bill forms are unchanged.
+                if (cfg.isExpenseReport) {
+                    form.addField({
+                        id: 'custpage_record_type',
+                        label: 'Record Type',
+                        type: ui.FieldType.TEXT
+                    }).updateDisplayType({displayType: ui.FieldDisplayType.HIDDEN}).defaultValue = cfg.recordType;
+                }
+
                 form.addSubmitButton({label: 'Submit'});
 
                 form.clientScriptFileId = 27150;
@@ -24,7 +38,7 @@ define(['N/ui/serverWidget', 'N/record', 'N/runtime', 'N/url', 'N/email', 'N/red
                 // Add hidden field for Bill ID
                 form.addField({
                     id: 'custpage_bill_id',
-                    label: 'Bill ID',
+                    label: cfg.isExpenseReport ? 'Expense Report ID' : 'Bill ID',
                     type: ui.FieldType.SELECT,
                     source: 'transaction'
                 }).updateDisplayType({displayType: ui.FieldDisplayType.INLINE}).defaultValue = vbId;
@@ -68,8 +82,8 @@ define(['N/ui/serverWidget', 'N/record', 'N/runtime', 'N/url', 'N/email', 'N/red
                     label: 'Approver Remarks'
                 }).updateDisplayType({displayType: ui.FieldDisplayType.ENTRY});
 
-                var vbRec = record.load({type: record.Type.VENDOR_BILL, id: vbId});
-                var sublists = ['item', 'expense'];
+                var vbRec = record.load({type: cfg.recordType, id: vbId});
+                var sublists = cfg.sublists;
                 var lineIndex = 0;
 
                 sublists.forEach(function (sublistId) {
@@ -123,7 +137,7 @@ define(['N/ui/serverWidget', 'N/record', 'N/runtime', 'N/url', 'N/email', 'N/red
                         if (sublistId == 'expense') {
                             accountValue = vbRec.getSublistText({
                                 sublistId: sublistId,
-                                fieldId: 'account',
+                                fieldId: cfg.expenseAccountField,
                                 line: i
                             });
                         }
@@ -179,7 +193,7 @@ define(['N/ui/serverWidget', 'N/record', 'N/runtime', 'N/url', 'N/email', 'N/red
         } else {
             try {
                 var vbId = request.parameters.custpage_bill_id;
-                var vbRec = record.load({type: record.Type.VENDOR_BILL, id: vbId, isDynamic: false});
+                var vbRec = record.load({type: cfg.recordType, id: vbId, isDynamic: false});
                 var action = request.parameters.custpage_action;
                 var lineCount = request.getLineCount({group: 'custpage_lines'});
                 var selectedCount = 0;
@@ -251,7 +265,7 @@ define(['N/ui/serverWidget', 'N/record', 'N/runtime', 'N/url', 'N/email', 'N/red
 
                 // Re-check if all lines now approved
                 var allApproved = true;
-                var sublists = ['item', 'expense'];
+                var sublists = cfg.sublists;
                 sublists.forEach(function (sublistId) {
                     var count = vbRec.getLineCount({sublistId});
                     for (var i = 0; i < count; i++) {
@@ -265,15 +279,15 @@ define(['N/ui/serverWidget', 'N/record', 'N/runtime', 'N/url', 'N/email', 'N/red
 
                 if (allApproved) {
                     record.submitFields({
-                        type: record.Type.VENDOR_BILL,
+                        type: cfg.recordType,
                         id: vbId,
-                        values: {custbody_bc_vb_all_approved: true}
+                        values: {[cfg.allApprovedField]: true}
                     });
                 }
 
                 // Re-check if all lines now rejected
                 var allRejected = true;
-                var sublists = ['item', 'expense'];
+                var sublists = cfg.sublists;
                 sublists.forEach(function (sublistId) {
                     var count = vbRec.getLineCount({sublistId});
                     for (var i = 0; i < count; i++) {
@@ -287,18 +301,18 @@ define(['N/ui/serverWidget', 'N/record', 'N/runtime', 'N/url', 'N/email', 'N/red
 
                 if (allRejected) {
                     record.submitFields({
-                        type: record.Type.VENDOR_BILL,
+                        type: cfg.recordType,
                         id: vbId,
-                        values: {custbody_bc_vb_all_rejected: true}
+                        values: {[cfg.allRejectedField]: true}
                     });
                 }
 
                 if (rejectedLines.length > 0) {
                     var creatorId = vbRec.getValue({fieldId: 'custbody_bc_created_by'});
                     if (creatorId) {
-                        var subject = 'Vendor Bill Lines Rejected (Bill #' + vbRec.getValue({fieldId: 'tranid'}) + ')';
+                        var subject = cfg.label + ' Lines Rejected (' + (cfg.isExpenseReport ? 'Report #' : 'Bill #') + vbRec.getValue({fieldId: 'tranid'}) + ')';
                         var body = 'Hi,<br/><br/>';
-                        body += 'The following lines were rejected on Vendor Bill ' + vbRec.getValue({fieldId: 'tranid'}) + ':<br/><br/>';
+                        body += 'The following lines were rejected on ' + cfg.label + ' ' + vbRec.getValue({fieldId: 'tranid'}) + ':<br/><br/>';
 
                         body += '<br/><table border="1" cellpadding="7" cellspacing="3" style="border-collapse: collapse;">';
                         body += '<tr><th>Line #</th><th>Project</th><th>Amount</th><th>Approver Remarks</th></tr>';
@@ -315,12 +329,12 @@ define(['N/ui/serverWidget', 'N/record', 'N/runtime', 'N/url', 'N/email', 'N/red
                         body += '</table>';
 
                         var vbUrl = url.resolveRecord({
-                            recordType: record.Type.VENDOR_BILL,
+                            recordType: cfg.recordType,
                             recordId: vbId,
                             isEditMode: false
                         });
                         body += '<p>Please review and resubmit the rejected lines if needed.</p>';
-                        body += '<p><a href="' + vbUrl + '" target="_blank">View Vendor Bill</a></p>';
+                        body += '<p><a href="' + vbUrl + '" target="_blank">View ' + cfg.label + '</a></p>';
 
                         email.send({
                             author: 7173, // Accounts Payable
@@ -335,7 +349,7 @@ define(['N/ui/serverWidget', 'N/record', 'N/runtime', 'N/url', 'N/email', 'N/red
                     }
                 }
 
-                redirect.toRecord({type: record.Type.VENDOR_BILL, id: vbId});
+                redirect.toRecord({type: cfg.recordType, id: vbId});
 
             } catch (e) {
                 log.debug('Suitelet POST Error', e);
@@ -344,44 +358,26 @@ define(['N/ui/serverWidget', 'N/record', 'N/runtime', 'N/url', 'N/email', 'N/red
         }
     }
 
-  function getApprovalConfig(recordType) {
-    var type = String(recordType || 'vendorbill').toLowerCase();
 
-    if (type !== 'vendorbill' && type !== 'expensereport') {
-        throw new Error('Unsupported transaction type: ' + type);
+    // Route Expense Reports to their own fields; legacy bill URLs default to Vendor Bill.
+    function getApprovalConfig(recordType) {
+        var type = String(recordType || 'vendorbill').toLowerCase();
+        if (type !== 'vendorbill' && type !== 'expensereport') {
+            throw new Error('Unsupported transaction type: ' + type);
+        }
+        var isExpenseReport = type === 'expensereport';
+        return {
+            recordType: type,
+            isExpenseReport: isExpenseReport,
+            label: isExpenseReport ? 'Expense Report' : 'Vendor Bill',
+            sublists: isExpenseReport ? ['expense'] : ['item', 'expense'],
+            stateField: isExpenseReport ? 'custbody_bc_er_wf_state' : 'custbody_bc_vb_wf_state',
+            allApprovedField: isExpenseReport ? 'custbody_bc_er_all_approved' : 'custbody_bc_vb_all_approved',
+            allRejectedField: isExpenseReport ? 'custbody_bc_er_all_rejected' : 'custbody_bc_vb_all_rejected',
+            allNoProjectField: isExpenseReport ? 'custbody_bc_er_all_no_project' : 'custbody_bc_all_no_project',
+            expenseAccountField: isExpenseReport ? 'expenseaccount' : 'account'
+        };
     }
-
-    var isExpenseReport = type === 'expensereport';
-
-    return {
-        recordType: type,
-        label: isExpenseReport ? 'Expense Report' : 'Vendor Bill',
-
-        sublists: isExpenseReport
-            ? ['expense']
-            : ['item', 'expense'],
-
-        stateField: isExpenseReport
-            ? 'custbody_bc_er_wf_state'
-            : 'custbody_bc_vb_wf_state',
-
-        allApprovedField: isExpenseReport
-            ? 'custbody_bc_er_all_approved'
-            : 'custbody_bc_vb_all_approved',
-
-        allRejectedField: isExpenseReport
-            ? 'custbody_bc_er_all_rejected'
-            : 'custbody_bc_vb_all_rejected',
-
-        allNoProjectField: isExpenseReport
-            ? 'custbody_bc_er_all_no_project'
-            : 'custbody_bc_all_no_project',
-
-        expenseAccountField: isExpenseReport
-            ? 'expenseaccount'
-            : 'account'
-    };
-}
 
     return {onRequest};
 });
