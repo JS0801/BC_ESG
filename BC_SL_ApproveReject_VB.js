@@ -100,7 +100,7 @@ define(['N/ui/serverWidget', 'N/record', 'N/runtime', 'N/url', 'N/email', 'N/red
                             line: i
                         });
 
-                        if (status !== '1') continue; // Only pending lines
+                  //      if (status !== '1') continue; // Only pending lines
                         if (!isAdmin) {
                             // Not admin → show only lines assigned to current user
                             if (approver != currentUserId) continue;
