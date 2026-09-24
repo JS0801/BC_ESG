@@ -6,13 +6,14 @@ define(['N/record', 'N/log', 'N/email'], function (record, log, email) {
     function onAction(context) {
         try {
             var vbId = context.newRecord.id;
+            var cfg = getApprovalConfig(context.newRecord.type);
             var vbRec = record.load({
-                type: record.Type.VENDOR_BILL,
+                type: cfg.recordType,
                 id: vbId,
                 isDynamic: false
             });
 
-            var sublists = ['item', 'expense'];
+            var sublists = cfg.sublists;
             var linesUpdated = 0;
 
             sublists.forEach(function (sublistId) {
@@ -37,9 +38,9 @@ define(['N/record', 'N/log', 'N/email'], function (record, log, email) {
                 }
             });
 
-            vbRec.setValue({ fieldId: 'custbody_bc_vb_all_rejected', value: true });
+            vbRec.setValue({ fieldId: cfg.allRejectedField, value: true });
             vbRec.setValue({ fieldId: 'approvalstatus', value: 3 });
-            vbRec.setValue({ fieldId: 'custbody_bc_vb_wf_state', value: 5 });
+            vbRec.setValue({ fieldId: cfg.stateField, value: 5 });
             var creator = vbRec.getValue({fieldId: 'custbody_bc_created_by'})
             var vbTranId = vbRec.getValue({fieldId: 'tranid'})
             try {
@@ -49,8 +50,8 @@ define(['N/record', 'N/log', 'N/email'], function (record, log, email) {
                         //author: authorId,
                         author: 7173, //Athena Santiago
                         recipients: creator,
-                        subject: 'Vendor Bill has been rejected',
-                        body: 'Vendor Bill:  ' + vbTranId + ' has been rejected.'
+                        subject: cfg.label + ' has been rejected',
+                        body: cfg.label + ':  ' + vbTranId + ' has been rejected.'
                     });
                 }
 
@@ -64,44 +65,26 @@ define(['N/record', 'N/log', 'N/email'], function (record, log, email) {
         }
     }
 
-  function getApprovalConfig(recordType) {
-    var type = String(recordType || 'vendorbill').toLowerCase();
 
-    if (type !== 'vendorbill' && type !== 'expensereport') {
-        throw new Error('Unsupported transaction type: ' + type);
+    // Route Expense Reports to their own fields; legacy bill URLs default to Vendor Bill.
+    function getApprovalConfig(recordType) {
+        var type = String(recordType || 'vendorbill').toLowerCase();
+        if (type !== 'vendorbill' && type !== 'expensereport') {
+            throw new Error('Unsupported transaction type: ' + type);
+        }
+        var isExpenseReport = type === 'expensereport';
+        return {
+            recordType: type,
+            isExpenseReport: isExpenseReport,
+            label: isExpenseReport ? 'Expense Report' : 'Vendor Bill',
+            sublists: isExpenseReport ? ['expense'] : ['item', 'expense'],
+            stateField: isExpenseReport ? 'custbody_bc_er_wf_state' : 'custbody_bc_vb_wf_state',
+            allApprovedField: isExpenseReport ? 'custbody_bc_er_all_approved' : 'custbody_bc_vb_all_approved',
+            allRejectedField: isExpenseReport ? 'custbody_bc_er_all_rejected' : 'custbody_bc_vb_all_rejected',
+            allNoProjectField: isExpenseReport ? 'custbody_bc_er_all_no_project' : 'custbody_bc_all_no_project',
+            expenseAccountField: isExpenseReport ? 'expenseaccount' : 'account'
+        };
     }
-
-    var isExpenseReport = type === 'expensereport';
-
-    return {
-        recordType: type,
-        label: isExpenseReport ? 'Expense Report' : 'Vendor Bill',
-
-        sublists: isExpenseReport
-            ? ['expense']
-            : ['item', 'expense'],
-
-        stateField: isExpenseReport
-            ? 'custbody_bc_er_wf_state'
-            : 'custbody_bc_vb_wf_state',
-
-        allApprovedField: isExpenseReport
-            ? 'custbody_bc_er_all_approved'
-            : 'custbody_bc_vb_all_approved',
-
-        allRejectedField: isExpenseReport
-            ? 'custbody_bc_er_all_rejected'
-            : 'custbody_bc_vb_all_rejected',
-
-        allNoProjectField: isExpenseReport
-            ? 'custbody_bc_er_all_no_project'
-            : 'custbody_bc_all_no_project',
-
-        expenseAccountField: isExpenseReport
-            ? 'expenseaccount'
-            : 'account'
-    };
-}
 
     return { onAction };
 });
