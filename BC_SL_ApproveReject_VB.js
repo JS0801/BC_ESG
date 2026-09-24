@@ -270,12 +270,14 @@ define(['N/ui/serverWidget', 'N/record', 'N/runtime', 'N/url', 'N/email', 'N/red
                     var count = vbRec.getLineCount({sublistId});
                     for (var i = 0; i < count; i++) {
                         var status = vbRec.getSublistValue({sublistId, fieldId: 'custcol_bc_approval_status', line: i});
+                        log.debug('status', status)
                         if (status != '2') {
                             allApproved = false;
                             break;
                         }
                     }
                 });
+                log.debug('allApproved', allApproved)                
 
                 if (allApproved) {
                     record.submitFields({
